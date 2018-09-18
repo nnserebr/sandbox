@@ -2,38 +2,6 @@
 #include "join.h"
 
 
-/*
-void test_sorter(std::vector<std::string> v){
-  bigstream::sorter<decltype(Key)> my_sorter(Key, 20);
-  for (auto &s : v) {
-    //std::cout << "test " << s << "\n";
-    bigstream::Row row = S2R(s);
-    my_sorter.insert_row(row);
-  }
-  my_sorter.end_insertion();
-  std::vector<bigstream::Row> result;
-  bigstream::Row row = my_sorter.next_sorted_row();
-  while (std::get<1>(row)) {
-    result.push_back(row);
-    //std::cout << "out " << my_sorter.R2S(row) << std::endl;
-    row = my_sorter.next_sorted_row();
-  }
-
-  EXPECT_TRUE(std::is_sorted(result.begin(), result.end(),
-        [](bigstream::Row r1, bigstream::Row r2){
-        return (Key(r1) < Key(r2) );
-        }));
-
-  for (auto r : result)
-    delete [] (char*)std::get<0>(r);
-}
-
-
-TEST(Sorter, T1) {
-  test_sorter({"ABCD", "A", "EFGHIJK", "BCCCCCCCCCC", "SSSSSSSSSSSSS", "KK" });
-}
-*/
-
 TEST(RowUtil, print) {
   typedef std::tuple<int, double, std::string, const char*> Row;
   Row row = std::make_tuple(42, 3.14, "asdf", "qqqmmm");
@@ -54,6 +22,7 @@ void testRowUtil(Row &row) {
   nns::RowUtil::deserialize(row_out, fs);
   EXPECT_EQ(row, row_out);
   nns::RowUtil::print(row_out, std::cout);
+  nns::RowUtil::cleanup(row_out);
 }
 
 TEST(RowUtil, serialize1) {
@@ -75,10 +44,19 @@ TEST(RowUtil, serialize3) {
 }
 
 TEST(RowUtil, serialize4) {
-  typedef std::tuple<long, long double, std::string, int, nns::CString> Row;
-  Row row = std::make_tuple(42, 3.14, std::string("asdf"), 45, nns::CString("asas"));
+  typedef std::tuple<const char*, int> Row;
+  const char *str = "asas";
+  Row row = std::make_tuple(str, 3);
   testRowUtil(row);
 }
+
+TEST(RowUtil, serialize5) {
+  typedef std::tuple<long, long double, std::string, int, const char*> Row;
+  Row row = std::make_tuple(42, 3.14, std::string("asdf"), 45, "asas");
+  testRowUtil(row);
+}
+
+
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv); 
     return RUN_ALL_TESTS();

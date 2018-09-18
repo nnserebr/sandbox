@@ -63,6 +63,13 @@ namespace nns {
       str.set(buf);
     }
 
+    template<typename T>
+    static void cleanupT(const T &item){}
+
+    static void cleanupT(const CString &str) {
+      delete [] str.get();
+    }
+
   // this code was inspired by
   // https://en.cppreference.com/w/cpp/utility/tuple/tuple_cat
     // helper functions to iterate over tuple
@@ -80,6 +87,10 @@ namespace nns {
         TupleVisitor<Row, N-1>::deserialize(row, fs);
         deserializeT(std::get<N-1>(row), fs);
       }
+      static void cleanup(const Row &row) {
+        TupleVisitor<Row, N-1>::cleanup(row);
+        cleanupT(std::get<N-1>(row));
+      }
     };
 
     template<typename Row>
@@ -92,6 +103,9 @@ namespace nns {
       }
       static void deserialize(Row &row, std::ifstream &fs) {
         deserializeT(std::get<0>(row), fs);
+      }
+      static void cleanup(const Row &row){
+        cleanupT(std::get<0>(row));
       }
     };
 
@@ -116,6 +130,16 @@ namespace nns {
     static void deserialize(Row &row, std::ifstream &fs) {
       TupleVisitor<Row, std::tuple_size<Row>::value>::deserialize(row, fs);
     }
+
+    // searches for CString type and frees allocated memory
+    template<typename Row>
+    static void cleanup(const Row &row) {
+      TupleVisitor<Row, std::tuple_size<Row>::value>::cleanup(row);
+    }
   };
 
+  template<typename Row>
+  class Table {
+    std::vector<Row> table;
+  };
 }
