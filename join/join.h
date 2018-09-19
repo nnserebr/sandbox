@@ -5,12 +5,16 @@
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <cstdlib>
+#include <random>
+#include <iterator>
+#include <algorithm>
 
 namespace nns {
   // wrapper for 'const char*' to behave like all normal types with ==
   class CString {
     const char *_s;
-   public:
+    public:
     CString(const char *s=nullptr):_s(s){}
     bool operator==(const CString &t) const { return !std::strcmp(_s, t._s);}
     const char *get() const {return _s;}
@@ -23,7 +27,7 @@ namespace nns {
 
   class RowUtil {
     // serialization of numeric types
-    template<typename T> 
+    template<typename T>
     static void serializeT(const T &item, std::ostream &os) {
       os.write((char *) &item, sizeof(item));
     }
@@ -40,6 +44,7 @@ namespace nns {
       os.write(s.get(), size);
     }
 
+
     // deserialization of numeric types
     template<typename T>
     static void deserializeT(T &item, std::ifstream &fs) {
@@ -49,6 +54,7 @@ namespace nns {
     static void deserializeT(std::string &s, std::ifstream &fs) {
       std::size_t size;
       fs.read((char*) &size, sizeof(size));
+      if (!fs.good()) return;
       std::vector<char> v(size);
       fs.read(v.data(), size);
       s.append(v.begin(), v.end());
@@ -57,6 +63,7 @@ namespace nns {
     static void deserializeT(CString &str, std::ifstream &fs) {
       std::size_t size;
       fs.read((char*) &size, sizeof(size));
+      if (!fs.good()) return;
       char *buf = new char[size+1];
       fs.read(buf, size);
       buf[size] = 0;
@@ -70,8 +77,31 @@ namespace nns {
       delete [] str.get();
     }
 
-  // this code was inspired by
-  // https://en.cppreference.com/w/cpp/utility/tuple/tuple_cat
+    template<typename T>
+    static void randomT(T &item) {
+      item = -1024 + std::rand() % 2048;
+    }
+    static void randomT(double &item) {
+      item = (-1024 + std::rand() % 2048) / 3.14;
+    }
+    // from somewhere https://www.reddit.com/r/cpp_questions/comments/22p1e6/random_string_generator_in_c/
+    static void randomT(std::string &s) {
+      std::size_t len = 1 + std::rand() % 12;
+      std::mt19937 mt { std::random_device {} () };
+      std::uniform_int_distribution<char> dist { 'a', 'z' };
+      std::generate_n(back_inserter(s), len, [&]() { return dist(mt); });
+    }
+    static void randomT(CString &str) {
+      std::string s;
+      randomT(s);
+      char *buf = new char[s.size()+1];
+      std::strcpy(buf, s.c_str());
+      str.set(buf);
+    }
+
+
+    // this code was inspired by
+    // https://en.cppreference.com/w/cpp/utility/tuple/tuple_cat
     // helper functions to iterate over tuple
     template<typename Row, std::size_t N>
     struct TupleVisitor {
@@ -91,6 +121,10 @@ namespace nns {
         TupleVisitor<Row, N-1>::cleanup(row);
         cleanupT(std::get<N-1>(row));
       }
+      static void random(Row &row) {
+        TupleVisitor<Row, N-1>::random(row);
+        randomT(std::get<N-1>(row));
+      }
     };
 
     template<typename Row>
@@ -106,6 +140,9 @@ namespace nns {
       }
       static void cleanup(const Row &row){
         cleanupT(std::get<0>(row));
+      }
+      static void random(Row &row) {
+        randomT(std::get<0>(row));
       }
     };
 
@@ -128,18 +165,65 @@ namespace nns {
     // deserializes tuple
     template<typename Row>
     static void deserialize(Row &row, std::ifstream &fs) {
+      //if(row != r) std::cout << "ERR\n";
       TupleVisitor<Row, std::tuple_size<Row>::value>::deserialize(row, fs);
     }
-
     // searches for CString type and frees allocated memory
     template<typename Row>
     static void cleanup(const Row &row) {
       TupleVisitor<Row, std::tuple_size<Row>::value>::cleanup(row);
     }
+    template<typename Row>
+    static void random(Row &row){
+      TupleVisitor<Row, std::tuple_size<Row>::value>::random(row);
+    }
   };
 
   template<typename Row>
   class Table {
-    std::vector<Row> table;
+    std::vector<Row> _table;
+   public:
+    Table():_table({}){}
+    void print(std::ostream &os) {
+      for(auto row: _table) RowUtil::print(row, os);
+    }
+    const std::vector<Row> & get() const {
+      return _table;
+    }
+    void add(const Row &row) {
+      _table.push_back(row);
+    }
+    void serialize(std::ofstream &fs) {
+      for(auto row: _table) {
+        RowUtil::serialize(row, fs);
+      }
+    }
+    void deserialize(std::ifstream &fs) {
+      assert(_table.empty());
+      // No real error handling here, assuming the input is valid.
+      while(true){
+        Row row;
+        RowUtil::deserialize(row, fs);
+        if(!fs) return;
+        add(row);
+      }
+    }
+    void cleanup() {
+      for(auto row: _table) RowUtil::cleanup(row);
+    }
   };
+  
+  // Function of no use here, just was training to write a function with auto return type
+  template<typename Row1, typename Row2>
+  auto table_product(const Table<Row1> &tbl1, const Table<Row2> &tbl2) 
+    -> Table<decltype(std::tuple_cat(Row1(), Row2()))>
+  {
+    Table<decltype(std::tuple_cat(Row1(), Row2()))> tbl;
+    for (auto &row1 : tbl1.get()) {
+      for (auto &row2 : tbl2.get()) {
+        tbl.add(std::tuple_cat(row1, row2));
+      }
+    }      
+    return tbl;
+  }
 }
