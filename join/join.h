@@ -9,12 +9,13 @@
 #include <random>
 #include <iterator>
 #include <algorithm>
+#include <unordered_map>
 
 namespace nns {
   // wrapper for 'const char*' to behave like all normal types with ==
   class CString {
     const char *_s;
-    public:
+   public:
     CString(const char *s=nullptr):_s(s){}
     bool operator==(const CString &t) const { return !std::strcmp(_s, t._s);}
     const char *get() const {return _s;}
@@ -24,7 +25,25 @@ namespace nns {
   std::ostream & operator << (std::ostream &os, const CString &str) {
     return os << str.get();
   }
+}
 
+namespace std {
+  template <>
+  struct hash<nns::CString>
+  {
+    std::size_t operator()(const nns::CString &s) const
+    {
+      const char *p = s.get();
+      std::size_t res = 0;
+      while(*p) {
+        res = *(p++) + res*31;
+      }
+      return res;
+    }
+  };
+}
+
+namespace nns {
   class RowUtil {
     // serialization of numeric types
     template<typename T>
@@ -78,22 +97,25 @@ namespace nns {
     }
 
     template<typename T>
-    static void randomT(T &item) {
-      item = -1024 + std::rand() % 2048;
+    static void randomT(T &item, std::mt19937 &mt) {
+      //item = -1024 + std::rand() % 2048;
+      item = -50 + mt() % 100;
     }
-    static void randomT(double &item) {
-      item = (-1024 + std::rand() % 2048) / 3.14;
+    static void randomT(double &item, std::mt19937 &mt) {
+      int d;
+      randomT(d, mt);
+      item = d * 3.14;
+      //item = (-50 + mt() % 100) * 0.1;
     }
     // from somewhere https://www.reddit.com/r/cpp_questions/comments/22p1e6/random_string_generator_in_c/
-    static void randomT(std::string &s) {
-      std::size_t len = 1 + std::rand() % 12;
-      std::mt19937 mt { std::random_device {} () };
+    static void randomT(std::string &s, std::mt19937 &mt) {
+      std::size_t len = 3;
       std::uniform_int_distribution<char> dist { 'a', 'z' };
       std::generate_n(back_inserter(s), len, [&]() { return dist(mt); });
     }
-    static void randomT(CString &str) {
+    static void randomT(CString &str, std::mt19937 &mt) {
       std::string s;
-      randomT(s);
+      randomT(s, mt);
       char *buf = new char[s.size()+1];
       std::strcpy(buf, s.c_str());
       str.set(buf);
@@ -121,9 +143,9 @@ namespace nns {
         TupleVisitor<Row, N-1>::cleanup(row);
         cleanupT(std::get<N-1>(row));
       }
-      static void random(Row &row) {
-        TupleVisitor<Row, N-1>::random(row);
-        randomT(std::get<N-1>(row));
+      static void random(Row &row, std::mt19937 &mt) {
+        TupleVisitor<Row, N-1>::random(row, mt);
+        randomT(std::get<N-1>(row), mt);
       }
     };
 
@@ -141,8 +163,8 @@ namespace nns {
       static void cleanup(const Row &row){
         cleanupT(std::get<0>(row));
       }
-      static void random(Row &row) {
-        randomT(std::get<0>(row));
+      static void random(Row &row, std::mt19937 &mt) {
+        randomT(std::get<0>(row), mt);
       }
     };
 
@@ -165,17 +187,18 @@ namespace nns {
     // deserializes tuple
     template<typename Row>
     static void deserialize(Row &row, std::ifstream &fs) {
-      //if(row != r) std::cout << "ERR\n";
       TupleVisitor<Row, std::tuple_size<Row>::value>::deserialize(row, fs);
     }
+
     // searches for CString type and frees allocated memory
     template<typename Row>
     static void cleanup(const Row &row) {
       TupleVisitor<Row, std::tuple_size<Row>::value>::cleanup(row);
     }
+
     template<typename Row>
-    static void random(Row &row){
-      TupleVisitor<Row, std::tuple_size<Row>::value>::random(row);
+    static void random(Row &row, std::mt19937 &mt){
+      TupleVisitor<Row, std::tuple_size<Row>::value>::random(row, mt);
     }
   };
 
@@ -185,7 +208,8 @@ namespace nns {
    public:
     Table():_table({}){}
     void print(std::ostream &os) {
-      for(auto row: _table) RowUtil::print(row, os);
+      for(auto row: _table)
+        RowUtil::print(row, os);
     }
     const std::vector<Row> & get() const {
       return _table;
@@ -194,9 +218,8 @@ namespace nns {
       _table.push_back(row);
     }
     void serialize(std::ofstream &fs) {
-      for(auto row: _table) {
+      for(auto row: _table)
         RowUtil::serialize(row, fs);
-      }
     }
     void deserialize(std::ifstream &fs) {
       assert(_table.empty());
@@ -209,13 +232,14 @@ namespace nns {
       }
     }
     void cleanup() {
-      for(auto row: _table) RowUtil::cleanup(row);
+      for(auto row: _table)
+        RowUtil::cleanup(row);
     }
   };
-  
+
   // Function of no use here, just was training to write a function with auto return type
   template<typename Row1, typename Row2>
-  auto table_product(const Table<Row1> &tbl1, const Table<Row2> &tbl2) 
+  auto table_product(const Table<Row1> &tbl1, const Table<Row2> &tbl2)
     -> Table<decltype(std::tuple_cat(Row1(), Row2()))>
   {
     Table<decltype(std::tuple_cat(Row1(), Row2()))> tbl;
@@ -223,7 +247,39 @@ namespace nns {
       for (auto &row2 : tbl2.get()) {
         tbl.add(std::tuple_cat(row1, row2));
       }
-    }      
+    }
     return tbl;
   }
+
+  // KeyIdx1, KeyIdx2 - numbers of columns to check the equality on
+  // Row1, Row2 - types of rows of 2 tables
+  template<std::size_t KeyIdx1, typename Row1, std::size_t KeyIdx2, typename Row2 >
+  struct Joiner {
+    typedef typename std::tuple_element<KeyIdx1, Row1>::type KeyType1;
+    typedef std::unordered_multimap<KeyType1, const Row1*> MMap;
+
+    // Returns multimap key : Row
+    static MMap make_table_map(const Table<Row1> &tbl) {
+      MMap mmap;
+      for(auto &row : tbl.get()) {
+        mmap.insert(std::make_pair(std::get<KeyIdx1>(row), &row));
+      }
+      return mmap;
+    }
+
+    typedef decltype(std::tuple_cat(Row1(), Row2())) RowCat;
+    static Table<RowCat> table_join(const Table<Row1> &tbl1, const Table<Row2> &tbl2) {
+      MMap mmap = make_table_map(tbl1);
+      Table<RowCat> tbl;
+      for(auto &row2 : tbl2.get()) {
+        auto key2 = std::get<KeyIdx2>(row2);
+        auto range = mmap.equal_range(key2);
+        for_each (range.first, range.second,
+            [&](typename MMap::value_type &pair){
+                 tbl.add(std::tuple_cat(*(pair.second), row2)); });
+      }
+      return tbl;
+    }
+  };
+
 }
