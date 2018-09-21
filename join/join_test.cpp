@@ -119,20 +119,17 @@ TEST(Table, cat) {
 }
 
 
-std::string string_tolower(const std::string &s) {
-  std::string res;
-  for (auto i = 0; i < s.length(); i++)
-    res += std::tolower(s[i]);
-  return res;
-}
-
 auto my_strcmp1 = [](const std::string &s1, const std::string &s2){return s1 == s2;};
 auto my_strhash1 = [](const std::string &s) {return std::hash<std::string>()(s);};
 
 auto my_strcmp2 = [](const std::string &s1, const std::string &s2){
-  if (s1.length() != s2.length()) return false;
-  return string_tolower(s1) == string_tolower(s2); };
-auto my_strhash2 = [](const std::string &s) {return std::hash<std::string>()(string_tolower(s));};
+  return !strcasecmp(s1.c_str(), s2.c_str()); };
+auto my_strhash2 = [](const std::string &s) {
+  std::size_t res = 0;
+  for (std::size_t i = 0; i < s.length(); i++)
+    res += (i + 1) * std::tolower(s[i]);
+  return res;   };
+
 
 
 typedef std::tuple<int, double, std::string, nns::CString> Row;

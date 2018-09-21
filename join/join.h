@@ -256,7 +256,7 @@ namespace nns {
       _table.clear();
     }
     void random(std::size_t size, std::mt19937 &mt) {
-      for (int i = 0; i < size; i++) {
+      for (std::size_t i = 0; i < size; i++) {
         Row row;
         RowUtil::random(row, mt);
         add(row);
