@@ -1,3 +1,4 @@
+// clang++  join_test.cpp -O2  -g -lgtest -lpthread  && ./a.out
 #include "gtest/gtest.h"
 #include "join.h"
 
@@ -125,8 +126,7 @@ void testTableMap(T d1, T d2, T d3, const nns::Table<Row> &tbl, const Row &row) 
     auto m = Joiner::make_table_map(tbl);
     EXPECT_EQ(m.size(), 6);
     {
-      int c = m.count(d1);
-      EXPECT_EQ(c, 1);
+      EXPECT_EQ(m.count(d1), 1);
       auto range = m.equal_range(d1);
       for_each (range.first, range.second,
           [&](typename Joiner::MMap::value_type &pair){
@@ -134,16 +134,14 @@ void testTableMap(T d1, T d2, T d3, const nns::Table<Row> &tbl, const Row &row) 
                 EXPECT_EQ(*(pair.second), row); });
     }
     {
-      int c = m.count(d2);
-      EXPECT_EQ(c, 2);
+      EXPECT_EQ(m.count(d2), 2);
       auto range = m.equal_range(d2);
       for_each (range.first, range.second,
           [&](typename Joiner::MMap::value_type &pair){
                 nns::RowUtil::print(*(pair.second), std::cout); });
     }
     {
-      int c = m.count(d3);
-      EXPECT_EQ(c, 0);
+      EXPECT_EQ(m.count(d3), 0);
     }
 }
 
