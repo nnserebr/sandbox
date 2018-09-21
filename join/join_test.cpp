@@ -43,14 +43,14 @@ TEST(RowUtil, file3) {
   Row row = std::make_tuple(42, 3.14, nns::CString("asdf"));
   testRowUtil(row);
 }
-/*
+
 TEST(RowUtil, file4) {
-  typedef std::tuple<const char*, int> Row;
-  const char *str = "asssssssssssssssssssssssssssssssssssssssas";
+  typedef std::tuple<nns::CString, int> Row;
+  const char *str = "sssssssssssssssssss";
   Row row = std::make_tuple(str, 3);
   testRowUtil(row);
 }
-*/
+
 TEST(RowUtil, file5) {
   typedef std::tuple<long, long double, std::string, int, nns::CString> Row;
   Row row = std::make_tuple(42, 3.14, std::string("asdf"), 45, nns::CString("asas"));
@@ -60,7 +60,6 @@ TEST(RowUtil, file5) {
 
 TEST(RowUtil, rand) {
   std::mt19937 mt { 0 };
-  //std::mt19937 mt { std::random_device {} () };
   typedef std::tuple<int, double, std::string, nns::CString> Row;
   Row row;
   nns::RowUtil::random(row, mt);
@@ -204,7 +203,6 @@ TEST(table, join) {
 }
 
 int main(int argc, char **argv) {
-    srand(1);
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

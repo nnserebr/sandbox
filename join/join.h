@@ -10,6 +10,7 @@
 #include <iterator>
 #include <algorithm>
 #include <unordered_map>
+#include <assert.h>
 
 namespace nns {
   // wrapper for 'const char*' to behave like all normal types with ==
@@ -27,6 +28,7 @@ namespace nns {
   }
 }
 
+// adding hash for CString
 namespace std {
   template <>
   struct hash<nns::CString>
@@ -62,7 +64,6 @@ namespace nns {
       os.write((char *) &size, sizeof(size));
       os.write(s.get(), size);
     }
-
 
     // deserialization of numeric types
     template<typename T>
@@ -120,7 +121,6 @@ namespace nns {
       std::strcpy(buf, s.c_str());
       str.set(buf);
     }
-
 
     // this code was inspired by
     // https://en.cppreference.com/w/cpp/utility/tuple/tuple_cat
@@ -208,8 +208,10 @@ namespace nns {
    public:
     Table():_table({}){}
     void print(std::ostream &os) {
+      os << "---- table begin -----\n";
       for(auto row: _table)
         RowUtil::print(row, os);
+      os << "---- table end -----\n";
     }
     const std::vector<Row> & get() const {
       return _table;
@@ -234,6 +236,16 @@ namespace nns {
     void cleanup() {
       for(auto row: _table)
         RowUtil::cleanup(row);
+    }
+    void clear() {
+      _table.clear();
+    }
+    void random(std::size_t size, std::mt19937 &mt) {
+      for (int i = 0; i < size; i++) {
+        Row row;
+        RowUtil::random(row, mt);
+        add(row);
+      }
     }
   };
 
@@ -281,5 +293,4 @@ namespace nns {
       return tbl;
     }
   };
-
 }
