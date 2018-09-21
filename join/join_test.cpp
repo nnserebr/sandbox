@@ -119,9 +119,26 @@ TEST(Table, cat) {
 }
 
 
+std::string string_tolower(const std::string &s) {
+  std::string res;
+  for (auto i = 0; i < s.length(); i++)
+    res += std::tolower(s[i]);
+  return res;
+}
+
+auto my_strcmp1 = [](const std::string &s1, const std::string &s2){return s1 == s2;};
+auto my_strhash1 = [](const std::string &s) {return std::hash<std::string>()(s);};
+
+auto my_strcmp2 = [](const std::string &s1, const std::string &s2){
+  if (s1.length() != s2.length()) return false;
+  return string_tolower(s1) == string_tolower(s2); };
+auto my_strhash2 = [](const std::string &s) {return std::hash<std::string>()(string_tolower(s));};
+
+
 typedef std::tuple<int, double, std::string, nns::CString> Row;
 template<std::size_t KeyIdx, typename T>
 void testTableMap(T d1, T d2, T d3, const nns::Table<Row> &tbl, const Row &row) {
+
     typedef nns::Joiner<KeyIdx, Row, 0, Row>  Joiner;
     auto m = Joiner::make_table_map(tbl);
     EXPECT_EQ(m.size(), 6);
@@ -187,8 +204,8 @@ TEST(table, join) {
   std::cout <<  "--- table 2 ----\n";
   tbl2.print(std::cout);
   {
-    typedef nns::Joiner<2, Row1, 0, Row2>  Joiner;
-    auto tbl = Joiner::table_join(tbl1, tbl2);
+    typedef nns::Joiner<2, Row1, 0, Row2, decltype(my_strhash1), decltype(my_strcmp1)>  Joiner;
+    auto tbl = Joiner::table_join(tbl1, tbl2, my_strhash1, my_strcmp1);
     std::cout <<  "--- table join 2 & 0 ----\n";
     tbl.print(std::cout);
   }

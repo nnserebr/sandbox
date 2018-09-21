@@ -117,8 +117,11 @@ namespace nns {
     // From somewhere https://www.reddit.com/r/cpp_questions/comments/22p1e6/random_string_generator_in_c/
     static void randomT(std::string &s, std::mt19937 &mt) {
       std::size_t len = 3;
-      std::uniform_int_distribution<char> dist { 'a', 'z' };
-      std::generate_n(back_inserter(s), len, [&]() { return dist(mt); });
+      std::string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      std::uniform_int_distribution<int> dist(0, characters.length() - 1);
+      for (size_t i = 0; i < len; ++i) {
+        s += characters[dist(mt)];
+      }
     }
     static void randomT(CString &str, std::mt19937 &mt) {
       std::string s;
@@ -219,7 +222,7 @@ namespace nns {
     std::vector<Row> _table;
    public:
     Table():_table({}){}
-    void print(std::ostream &os) {
+    void print (std::ostream &os) {
       os << "---- table begin -----\n";
       for(auto &row: _table)
         RowUtil::print(row, os);
@@ -280,14 +283,19 @@ namespace nns {
 
   // KeyIdx1, KeyIdx2 - numbers of columns to check the equality on
   // Row1, Row2 - types of rows of 2 tables
-  template<std::size_t KeyIdx1, typename Row1, std::size_t KeyIdx2, typename Row2 >
+  // Hash and Cmp - optional hasher and comparator
+  template<std::size_t KeyIdx1, typename Row1, std::size_t KeyIdx2, typename Row2,
+                      typename Hash=std::hash<typename std::tuple_element<KeyIdx1, Row1>::type>,
+                      typename Cmp=std::equal_to<typename std::tuple_element<KeyIdx1, Row1>::type>>
   struct Joiner {
     typedef typename std::tuple_element<KeyIdx1, Row1>::type KeyType1;
-    typedef std::unordered_multimap<KeyType1, const Row1 *> MMap;
+
+    typedef std::unordered_multimap<const KeyType1, const Row1 *, const Hash &, const Cmp &> MMap;
 
     // Returns multimap key : Row
-    static MMap make_table_map(const Table<Row1> &tbl) {
-      MMap mmap;
+    static MMap make_table_map(const Table<Row1> &tbl,
+             const Hash &hasher=std::hash<KeyType1>(), const Cmp &cmp=std::equal_to<KeyType1>()) {
+      MMap mmap(1, hasher, cmp);
       for(auto &row : tbl.get()) {
         mmap.insert(std::make_pair(std::get<KeyIdx1>(row), &row));
       }
@@ -297,8 +305,9 @@ namespace nns {
     // Joins tbl1 and tbl2 into new table with rows combined by
     // checking equality on KeyIdx1 column of tbl1 and KeyIdx2 of column2
     typedef decltype(std::tuple_cat(Row1(), Row2())) RowCat;
-    static Table<RowCat> table_join(const Table<Row1> &tbl1, const Table<Row2> &tbl2) {
-      MMap mmap = make_table_map(tbl1);
+    static Table<RowCat> table_join(const Table<Row1> &tbl1, const Table<Row2> &tbl2,
+                const Hash &hasher=std::hash<KeyType1>(), const Cmp &cmp=std::equal_to<KeyType1>()) {
+      MMap mmap = make_table_map(tbl1, hasher, cmp);
       Table<RowCat> tbl;
       for(auto &row2 : tbl2.get()) {
         auto range = mmap.equal_range(std::get<KeyIdx2>(row2));
